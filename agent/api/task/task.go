@@ -1640,6 +1640,22 @@ func (task *Task) shouldOverrideNetworkMode(container *apicontainer.Container, d
 		return false, ""
 	}
 
+	// Disable networking for the container by setting the network mode to none
+	// if canva.ecs.disable-networking=true label is set on the container.
+	if container.DockerConfig.Config != nil {
+		containerConfig := &dockercontainer.Config{}
+		if err := json.Unmarshal([]byte(aws.StringValue(container.DockerConfig.Config)), &containerConfig); err != nil {
+			seelog.Errorf("unable to decode given docker config: %s", err.Error())
+		} else {
+			disableNetworkingLabel, ok := containerConfig.Labels["canva.ecs.disable-networking"]
+			if ok && disableNetworkingLabel == "true" {
+				seelog.Infof("Canva hack: Task [%s]: disabling network (setting network mode to none) for container [%s] with set canva.ecs.disable-networking label.",
+					task.Arn, container.Name)
+				return true, networkModeNone
+			}
+		}
+	}
+
 	pauseContName := ""
 	for _, cont := range task.Containers {
 		if cont.Type == apicontainer.ContainerCNIPause {
